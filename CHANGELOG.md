@@ -8,6 +8,24 @@ Versioning follows [Semantic Versioning](https://semver.org). See
 [README › Stability and versioning](README.md#stability-and-versioning) for
 the public-API contract.
 
+## BetterTV fork (`palla89/AetherEngine`, branch `bettertv`), 2026-11-12
+
+Changes the fork carries on top of upstream 7.58.0, tagged `7.58.0-bettertv.1`. Not part of an
+upstream release; `AetherEngine.version` still reports the upstream version the fork is based on.
+
+### Added
+
+- **A live session can set its own DVR disk budget (`LoadOptions.liveDVRByteBudget`).** Live
+  timeshift history was held to the automatic session budget, at most 2 GiB and a quarter of the
+  free space, whatever the host asked for: `sessionCacheByteBudget` is the VOD request and a live
+  session passed nil in its place, and the software ring sized itself with no request at all. On
+  a broadcast channel at 15 to 20 Mbit/s that is about 15 to 19 minutes of a 60 minute window. The
+  new option replaces the 2 GiB default on both routes (the loopback segment cache and the software
+  packet ring, and with it the cap on a software lease). The quarter-of-free-space clamp, the
+  `RetentionClaims` sharing, the 2 GiB ceiling for unknown capacity and the ring's 64 MiB floor all
+  still apply. nil, zero or negative keeps the automatic policy, so a host that does not set it
+  behaves exactly as on 7.58.0.
+
 ## [Unreleased]
 
 _Nothing yet._

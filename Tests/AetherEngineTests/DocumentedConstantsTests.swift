@@ -282,6 +282,16 @@ final class DocumentedConstantsTests: XCTestCase {
         assertDocumented("2 GiB cap", docs)
     }
 
+    /// Fork (bettertv): the `liveDVRByteBudget` row quotes the ring floor and the playlist cap that
+    /// can bind before the bytes do.
+    func testLiveDVRByteBudgetRowNumbers() throws {
+        let docs = try documentation()
+        XCTAssertEqual(PacketRingBuffer.minimumLiveByteBudget, 64 << 20, "documented as a 64 MiB floor")
+        XCTAssertEqual(LiveWindowSizing.maxWindowSegments, 900, "documented as 900 playlist entries")
+        assertDocumented("keeps its 64 MiB floor", docs)
+        assertDocumented("capped at 900 playlist entries", docs)
+    }
+
     // MARK: - Probe budgets
 
     func testWholeProbeDefaultsMatchDocumentation() throws {

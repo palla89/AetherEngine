@@ -1053,6 +1053,11 @@ public final class HLSVideoEngine: @unchecked Sendable {
         /// `SegmentCache`, `PrefetchDiskBudget` and the window sizing, so an explicit request never
         /// hands them 0: the playback window stays resident, nothing past it does.
         var enforcedBytes: Int { requestedBytes == nil ? baseEffectiveBytes : max(1, baseEffectiveBytes) }
+
+        /// Live has no window-only mode. A `liveDVRByteBudget` the claims clamp to 0 stays the
+        /// automatic 0 (time-sized window, hard-window retention) instead of becoming a 1 byte bound
+        /// that `LiveWindowSizing.affordableSegments` would read as "8 segments".
+        func enforcedBytes(isLive: Bool) -> Int { isLive ? baseEffectiveBytes : enforcedBytes }
     }
 
     /// Resolve a caller-exact session budget without weakening the existing tmp-volume guard.
@@ -1106,12 +1111,33 @@ public final class HLSVideoEngine: @unchecked Sendable {
     /// `capRelaxed` (#207) drops the 2 GiB default for a host that explicitly asked to pre-buffer more
     /// than the historical window could hold; the quarter-of-free-space clamp, which is what actually
     /// protects the volume, always applies. Unknown capacity keeps the conservative cap either way.
+    ///
+    /// Fork (bettertv): `LoadOptions.liveDVRByteBudget` is the live counterpart of
+    /// `sessionCacheByteBudget`. It replaces the 2 GiB default on a live session and goes through the
+    /// same resolution, so the quarter-of-free-space clamp still applies. Unset, a live session gets
+    /// exactly this function's result, as before.
     static func sessionRetentionBudgetBytes(volumeAvailableBytes: Int64?, capRelaxed: Bool = false) -> Int {
         resolveSessionCacheBudget(
             requestedBytes: nil,
             volumeAvailableBytes: volumeAvailableBytes,
             capRelaxed: capRelaxed
         ).baseEffectiveBytes
+    }
+
+    /// Fork (bettertv): a usable `LoadOptions.liveDVRByteBudget`, or nil for the automatic policy.
+    /// Zero and negative read as nil rather than as the VOD "window-only" request: live already falls
+    /// back to the hard window when the disk is short, and a host asking for no history sets no
+    /// `dvrWindowSeconds`.
+    static func liveDVRRequestBytes(_ liveDVRByteBudget: Int?) -> Int? {
+        liveDVRByteBudget.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// Fork (bettertv): the byte request a session's retention resolves against. VOD keeps
+    /// `sessionCacheByteBudget` and live takes `liveDVRByteBudget`, so neither leaks into the other
+    /// (a host that sets one VOD budget for every load leaves its live history as it was).
+    static func retentionRequestBytes(isLive: Bool, sessionCacheByteBudget: Int?,
+                                      liveDVRByteBudget: Int?) -> Int? {
+        isLive ? liveDVRRequestBytes(liveDVRByteBudget) : sessionCacheByteBudget
     }
 
     /// Largest forward window the default 2 GiB retention budget covers by construction
@@ -1179,7 +1205,8 @@ public final class HLSVideoEngine: @unchecked Sendable {
         heldSourceConnection: Bool = false,
         declaredDurationSeconds: Double? = nil,
         forwardBufferSegments: Int? = nil,
-        sessionCacheByteBudget: Int? = nil
+        sessionCacheByteBudget: Int? = nil,
+        liveDVRByteBudget: Int? = nil
     ) {
         self.sourceURL = url
         self.requestHeaders = RequestHeaderStore(sourceHTTPHeaders)
@@ -1249,6 +1276,7 @@ public final class HLSVideoEngine: @unchecked Sendable {
         self.companionAudioReader = companionAudioReader
         self.forwardWindowSegments = Self.clampedForwardWindow(forwardBufferSegments)
         self.requestedSessionCacheBudgetBytes = sessionCacheByteBudget.map { max(0, $0) }
+        self.requestedLiveDVRBudgetBytes = Self.liveDVRRequestBytes(liveDVRByteBudget)
     }
 
     /// Session forward-buffer window in segments. Drives BOTH the producer's race-ahead
@@ -1263,6 +1291,14 @@ public final class HLSVideoEngine: @unchecked Sendable {
     /// VOD-only (`advanceMuxer`), so live cannot park on it.
     private var retentionBudgetBytes: Int = 0
     private let requestedSessionCacheBudgetBytes: Int?
+    /// Fork (bettertv): `LoadOptions.liveDVRByteBudget`, already normalized; read on live only.
+    private let requestedLiveDVRBudgetBytes: Int?
+    /// The request this session's retention resolves against (`retentionRequestBytes`).
+    var retentionRequestBytes: Int? {
+        Self.retentionRequestBytes(isLive: isLiveSession,
+                                   sessionCacheByteBudget: requestedSessionCacheBudgetBytes,
+                                   liveDVRByteBudget: requestedLiveDVRBudgetBytes)
+    }
     private var sessionCacheVolumeSafetyLimitBytes: Int?
     /// The clamped request the status reports; `retentionBudgetBytes` is what is enforced.
     private var sessionCacheBaseEffectiveBytes: Int = 0
@@ -1823,11 +1859,11 @@ public final class HLSVideoEngine: @unchecked Sendable {
         var resolvedBudget: SessionCacheBudgetResolution?
         let claim = RetentionClaims.shared.claim(volumeAvailableBytes: availableBytes) { remaining in
             let budget = Self.resolveSessionCacheBudget(
-                requestedBytes: isLiveSession ? nil : requestedSessionCacheBudgetBytes,
+                requestedBytes: retentionRequestBytes,
                 volumeAvailableBytes: remaining,
                 capRelaxed: capRelaxed)
             resolvedBudget = budget
-            return budget.enforcedBytes
+            return budget.enforcedBytes(isLive: isLiveSession)
         }
         let budget = resolvedBudget ?? Self.resolveSessionCacheBudget(
             requestedBytes: nil, volumeAvailableBytes: availableBytes, capRelaxed: capRelaxed)

@@ -919,7 +919,8 @@ extension AetherEngine {
             heldSourceConnection: loadedOptions.heldSourceConnection,
             declaredDurationSeconds: loadedOptions.declaredDurationSeconds,
             forwardBufferSegments: forwardBufferSegmentsForSession(loadedOptions.forwardBufferSegments),
-            sessionCacheByteBudget: loadedOptions.sessionCacheByteBudget
+            sessionCacheByteBudget: loadedOptions.sessionCacheByteBudget,
+            liveDVRByteBudget: loadedOptions.liveDVRByteBudget
         )
         sessionCacheStatusToken &+= 1
         let cacheStatusToken = sessionCacheStatusToken
@@ -2046,6 +2047,7 @@ extension AetherEngine {
         host.setAudioDelay(loadedOptions.audioDelaySeconds)   // AE#464: before the decoder opens
         host.audioShaping = loadedOptions.audioShaping        // AE#923: likewise
         if isLive { host.liveEdgeCushionSeconds = loadedOptions.liveEdgeCushionSeconds }
+        if isLive { host.liveDVRByteBudget = loadedOptions.liveDVRByteBudget }   // fork (bettertv)
         // AE#813: a live ingest delivers whole segments, and the host's holdback follows their length.
         if isLive, let ingest = customReader as? LiveIngestSourceInfo {
             host.liveDeliveryUnit = { [weak ingest] in

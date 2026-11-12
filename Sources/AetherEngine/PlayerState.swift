@@ -656,12 +656,20 @@ public struct LoadOptions: Sendable, Equatable {
     /// Lean audio-only path (FFmpeg + AVSampleBufferAudioRenderer): skips video probe, display-criteria handshake, HLS/muxer/loopback stack. Also set automatically when the probe finds no video stream. Default `false`.
     public var audioOnly: Bool
 
-    /// DVR rewind window in seconds; nil = live-only (seek is a no-op). Engine retains roughly this much past content disk-backed, bounded by the session disk budget (a quarter of the free space, at most 2 GiB), so a long window on a high-bitrate channel or a small volume holds less than it asks for. Suggested default: 1800. Ignored when `isLive == false`. Default nil.
+    /// DVR rewind window in seconds; nil = live-only (seek is a no-op). Engine retains roughly this much past content disk-backed, bounded by the session disk budget (a quarter of the free space, at most 2 GiB unless `liveDVRByteBudget` sets another amount), so a long window on a high-bitrate channel or a small volume holds less than it asks for. Suggested default: 1800. Ignored when `isLive == false`. Default nil.
     public var dvrWindowSeconds: Double?
 
     /// Opt in to strict software DVR storage bounds and runtime capacity leases.
     /// Nil preserves the default spool behavior.
     public var softwareDVRRetention: SoftwareDVRRetentionOptions? = nil
+
+    /// Live DVR disk budget in bytes, on both routes: the loopback segment cache that holds the
+    /// native DVR history and the software route's packet ring. Replaces the automatic 2 GiB default
+    /// (larger or smaller) and is still clamped to a quarter of the free space left after other
+    /// sessions' claims; unknown capacity keeps the 2 GiB ceiling and the software ring keeps its
+    /// 64 MiB playback floor. nil, zero or negative keeps the automatic policy. Ignored for VOD (see
+    /// `sessionCacheByteBudget`) and `nativeRemoteHLS`. Fork addition (bettertv). Default nil.
+    public var liveDVRByteBudget: Int? = nil
 
     /// LL-HLS blocking-reload (`#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD`) override for live loopback sessions.
     /// nil (default) = auto: for a `LiveIngestSourceInfo` custom reader the engine derives eligibility from

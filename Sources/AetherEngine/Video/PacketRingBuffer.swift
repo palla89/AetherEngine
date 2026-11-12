@@ -39,10 +39,16 @@ final class PacketRingBuffer: @unchecked Sendable {
     static let minimumLiveByteBudget = 64 << 20
 
     /// The native path's retention funnel (min(2 GiB, a quarter of free space)) with the live floor.
-    static func liveByteBudget(volumeAvailableBytes: Int64?, capRelaxed: Bool = false) -> Int {
+    /// Fork (bettertv): `requestedBytes` is `LoadOptions.liveDVRByteBudget`. It replaces the 2 GiB
+    /// default exactly as on the native path; the quarter-of-free clamp and this floor still apply,
+    /// and nil (or a value that is not positive) is the automatic policy.
+    static func liveByteBudget(volumeAvailableBytes: Int64?, requestedBytes: Int? = nil,
+                               capRelaxed: Bool = false) -> Int {
         max(minimumLiveByteBudget,
-            HLSVideoEngine.sessionRetentionBudgetBytes(volumeAvailableBytes: volumeAvailableBytes,
-                                                       capRelaxed: capRelaxed))
+            HLSVideoEngine.resolveSessionCacheBudget(
+                requestedBytes: HLSVideoEngine.liveDVRRequestBytes(requestedBytes),
+                volumeAvailableBytes: volumeAvailableBytes,
+                capRelaxed: capRelaxed).baseEffectiveBytes)
     }
 
     // MARK: - Private types
@@ -82,7 +88,7 @@ final class PacketRingBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private let writeLock = NSLock()
     private let windowSeconds: Double
-    private let byteBudget: Int
+    let byteBudget: Int   // internal for the fork's liveDVRByteBudget wiring test
     /// An opt-in capacity lease applies a strict startup and playback cap to this chunk spool.
     /// Callers without retention leases retain their original byteBudget behavior.
     private let strictRetention: Bool
