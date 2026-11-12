@@ -666,8 +666,9 @@ public struct LoadOptions: Sendable, Equatable {
     /// Live DVR disk budget in bytes, on both routes: the loopback segment cache that holds the
     /// native DVR history and the software route's packet ring. Replaces the automatic 2 GiB default
     /// (larger or smaller) and is still clamped to a quarter of the free space left after other
-    /// sessions' claims; unknown capacity keeps the 2 GiB ceiling and the software ring keeps its
-    /// 64 MiB playback floor. nil, zero or negative keeps the automatic policy. Ignored for VOD (see
+    /// sessions' claims (or to that space minus `BetterTVFork.diskReserveBytes`, when set and
+    /// larger); unknown capacity keeps the 2 GiB ceiling and the software ring keeps its 64 MiB
+    /// playback floor. nil, zero or negative keeps the automatic policy. Ignored for VOD (see
     /// `sessionCacheByteBudget`) and `nativeRemoteHLS`. Fork addition (bettertv). Default nil.
     public var liveDVRByteBudget: Int? = nil
 

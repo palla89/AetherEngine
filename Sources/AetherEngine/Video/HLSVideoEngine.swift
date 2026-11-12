@@ -1069,9 +1069,9 @@ public final class HLSVideoEngine: @unchecked Sendable {
         capRelaxed: Bool = false
     ) -> SessionCacheBudgetResolution {
         let conservativeCap = 2 << 30
+        // Fork (bettertv): a quarter of the free space, or free space minus `BetterTVFork.diskReserveBytes`.
         let quarterOfFree = volumeAvailableBytes.map { available -> Int in
-            let quarter = max(Int64(0), available / 4)
-            return Int(min(quarter, Int64(Int.max)))
+            Int(min(BetterTVFork.volumeSafetyLimit(availableBytes: available), Int64(Int.max)))
         }
         let safetyLimit = quarterOfFree ?? conservativeCap
 
