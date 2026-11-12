@@ -1206,7 +1206,8 @@ public final class HLSVideoEngine: @unchecked Sendable {
         declaredDurationSeconds: Double? = nil,
         forwardBufferSegments: Int? = nil,
         sessionCacheByteBudget: Int? = nil,
-        liveDVRByteBudget: Int? = nil
+        liveDVRByteBudget: Int? = nil,
+        liveMaxPlaylistSegments: Int? = nil
     ) {
         self.sourceURL = url
         self.requestHeaders = RequestHeaderStore(sourceHTTPHeaders)
@@ -1277,6 +1278,7 @@ public final class HLSVideoEngine: @unchecked Sendable {
         self.forwardWindowSegments = Self.clampedForwardWindow(forwardBufferSegments)
         self.requestedSessionCacheBudgetBytes = sessionCacheByteBudget.map { max(0, $0) }
         self.requestedLiveDVRBudgetBytes = Self.liveDVRRequestBytes(liveDVRByteBudget)
+        self.livePlaylistCeilingSegments = LiveWindowSizing.resolvedMaxPlaylistSegments(liveMaxPlaylistSegments)
     }
 
     /// Session forward-buffer window in segments. Drives BOTH the producer's race-ahead
@@ -1293,6 +1295,10 @@ public final class HLSVideoEngine: @unchecked Sendable {
     private let requestedSessionCacheBudgetBytes: Int?
     /// Fork (bettertv): `LoadOptions.liveDVRByteBudget`, already normalized; read on live only.
     private let requestedLiveDVRBudgetBytes: Int?
+    /// Fork (bettertv): `LoadOptions.liveMaxPlaylistSegments`, resolved
+    /// (`LiveWindowSizing.resolvedMaxPlaylistSegments`): 900 unless the host set another ceiling. The
+    /// live window sizing carries it; VOD never reads it.
+    let livePlaylistCeilingSegments: Int
     /// The request this session's retention resolves against (`retentionRequestBytes`).
     var retentionRequestBytes: Int? {
         Self.retentionRequestBytes(isLive: isLiveSession,
@@ -2423,7 +2429,9 @@ public final class HLSVideoEngine: @unchecked Sendable {
                 // the sizing the budget is what lets the two meet, instead of the producer meeting a
                 // resident cap it can never pass.
                 retentionBudgetBytes: retentionBudgetBytes,
-                edgeCushionSeconds: isLiveSession ? liveEdgeCushionSeconds : nil
+                edgeCushionSeconds: isLiveSession ? liveEdgeCushionSeconds : nil,
+                // Fork (bettertv): `LoadOptions.liveMaxPlaylistSegments`, 900 when unset.
+                playlistCeilingSegments: livePlaylistCeilingSegments
             ),
             nativeLiveDVRPolicy: isLiveSession ? nativeLiveDVRPolicy : nil,
             allowsBoundedDegradedStart: liveJoinProfile == .fastZap,

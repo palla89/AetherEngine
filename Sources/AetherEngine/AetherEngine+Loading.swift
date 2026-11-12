@@ -920,7 +920,8 @@ extension AetherEngine {
             declaredDurationSeconds: loadedOptions.declaredDurationSeconds,
             forwardBufferSegments: forwardBufferSegmentsForSession(loadedOptions.forwardBufferSegments),
             sessionCacheByteBudget: loadedOptions.sessionCacheByteBudget,
-            liveDVRByteBudget: loadedOptions.liveDVRByteBudget
+            liveDVRByteBudget: loadedOptions.liveDVRByteBudget,
+            liveMaxPlaylistSegments: loadedOptions.liveMaxPlaylistSegments
         )
         sessionCacheStatusToken &+= 1
         let cacheStatusToken = sessionCacheStatusToken

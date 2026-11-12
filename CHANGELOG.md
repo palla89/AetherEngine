@@ -10,7 +10,8 @@ the public-API contract.
 
 ## BetterTV fork (`palla89/AetherEngine`, branch `bettertv`), 2026-11-12
 
-Changes the fork carries on top of upstream 7.58.0, tagged `7.58.0-bettertv.1`. Not part of an
+Changes the fork carries on top of upstream 7.58.0, tagged `7.58.0-bettertv.1` and
+`7.58.0-bettertv.2`. Not part of an
 upstream release; `AetherEngine.version` still reports the upstream version the fork is based on.
 
 ### Added
@@ -25,6 +26,15 @@ upstream release; `AetherEngine.version` still reports the upstream version the 
   `RetentionClaims` sharing, the 2 GiB ceiling for unknown capacity and the ring's 64 MiB floor all
   still apply. nil, zero or negative keeps the automatic policy, so a host that does not set it
   behaves exactly as on 7.58.0.
+- **A live session can raise its playlist ceiling (`LoadOptions.liveMaxPlaylistSegments`,
+  `7.58.0-bettertv.2`).** A native live playlist listed at most 900 entries (AE#443), whatever the
+  window and the disk budget allowed. On `.fastZap` a segment is one GOP, about 0.5 to 1 s on
+  broadcast, so a 5400 s window was served at 900 segments, about 15 minutes. The option sets the
+  session's own ceiling, clamped to 8...21600; the disk budget, `minSafeSegments` and the producer's
+  resident cap (window plus slack) all follow it, on a native lease too. The cost is per poll: the
+  whole visible playlist, and each native subtitle playlist that mirrors it, is rebuilt and
+  re-served on every reload, so 5400 entries is about 6x the work of 900. nil, zero or negative
+  keeps 900, so a host that does not set it behaves exactly as on 7.58.0.
 
 ## [Unreleased]
 

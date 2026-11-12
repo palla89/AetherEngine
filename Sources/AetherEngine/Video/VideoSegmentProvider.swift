@@ -29,7 +29,27 @@ struct LiveWindowSizing {
     /// cheap the segments. A PLAYLIST bound rather than a disk one (the retention budget below is the
     /// disk bound): the whole visible window is rebuilt and re-served on every poll, and a live client
     /// polls about once per target duration.
+    ///
+    /// Fork (bettertv): this is the default. A session reads `playlistCeilingSegments`, which is this
+    /// value unless `LoadOptions.liveMaxPlaylistSegments` sets another one.
     static let maxWindowSegments = 900
+
+    /// Fork (bettertv): the highest `LoadOptions.liveMaxPlaylistSegments` a session may set. 21600 is
+    /// three hours at the 0.5 s cut-target floor the window divides by (`requestedSegmentCount`), or six
+    /// hours at a 1 s broadcast GOP: deeper than any timeshift a disk budget holds at broadcast
+    /// bitrates, and still a bound, so a host passing `Int.max` gets a finite playlist rather than one
+    /// that grows for the whole session. A sanity bound, not a recommendation: a full 21600-entry
+    /// playlist is about 590 KB of text per poll (measured on a Mac, debug build: ~40 ms per build
+    /// against ~1.7 ms for 900 and ~10 ms for 5400).
+    static let maxPlaylistSegmentsUpperBound = 21_600
+
+    /// Fork (bettertv): the ceiling a session's `LoadOptions.liveMaxPlaylistSegments` resolves to.
+    /// nil, zero or negative keeps `maxWindowSegments` (900); anything else is clamped to
+    /// `minSafeSegments...maxPlaylistSegmentsUpperBound`.
+    static func resolvedMaxPlaylistSegments(_ requested: Int?) -> Int {
+        guard let requested, requested > 0 else { return maxWindowSegments }
+        return min(max(requested, minSafeSegments), maxPlaylistSegmentsUpperBound)
+    }
 
     let targetSegmentDurationSeconds: Double
     let dvrWindowSeconds: Double?
@@ -40,6 +60,11 @@ struct LiveWindowSizing {
     /// window holds at least this plus `edgeCushionWindowMarginSeconds`, so the playhead it parks that
     /// far back never sits at the segment the next slide evicts.
     var edgeCushionSeconds: Double? = nil
+
+    /// Fork (bettertv): this session's playlist ceiling, `maxWindowSegments` unless
+    /// `LoadOptions.liveMaxPlaylistSegments` raised or lowered it (already resolved by
+    /// `resolvedMaxPlaylistSegments`). The disk bound and `minSafeSegments` apply as before.
+    var playlistCeilingSegments: Int = LiveWindowSizing.maxWindowSegments
 
     static let edgeCushionWindowMarginSeconds: Double = 15
 
@@ -57,7 +82,7 @@ struct LiveWindowSizing {
         let asked = requestedSegmentCount(observedSegmentDurationSeconds: observedSegmentDurationSeconds)
         let affordable = Self.affordableSegments(retentionBudgetBytes: retentionBudgetBytes,
                                                  observedSegmentBytes: observedSegmentBytes)
-        return max(Self.minSafeSegments, min(asked, affordable, Self.maxWindowSegments))
+        return max(Self.minSafeSegments, min(asked, affordable, playlistCeilingSegments))
     }
 
     /// AE#443: the window in segments as ASKED for, before either bound. Only the log reads it, and it
@@ -776,7 +801,8 @@ final class VideoSegmentProvider: HLSSegmentProvider, @unchecked Sendable {
         guard let limits = nativeLiveDVRPolicy?.snapshot else { return baseLiveWindowSizing }
         return LiveWindowSizing(targetSegmentDurationSeconds: baseLiveWindowSizing.targetSegmentDurationSeconds,
                                 dvrWindowSeconds: limits.windowSeconds, retentionBudgetBytes: limits.retentionBytes,
-                                edgeCushionSeconds: baseLiveWindowSizing.edgeCushionSeconds)
+                                edgeCushionSeconds: baseLiveWindowSizing.edgeCushionSeconds,
+                                playlistCeilingSegments: baseLiveWindowSizing.playlistCeilingSegments)
     }
 
     /// Reconcile playlist and cache off the caller's actor; this never rebuilds the source/player.
@@ -1562,11 +1588,12 @@ final class VideoSegmentProvider: HLSSegmentProvider, @unchecked Sendable {
         let affordable = LiveWindowSizing.affordableSegments(
             retentionBudgetBytes: liveWindowSizing.retentionBudgetBytes,
             observedSegmentBytes: observedSegmentBytes)
-        let bound = affordable <= LiveWindowSizing.maxWindowSegments
+        let ceiling = liveWindowSizing.playlistCeilingSegments
+        let bound = affordable <= ceiling
             ? "\(liveWindowSizing.retentionBudgetBytes / (1 << 20)) MiB of retention holds "
               + "\(affordable) segments of \((observedSegmentBytes ?? 0) / 1024) KiB"
             : "a live playlist is rebuilt and re-served on every poll, so it is capped at "
-              + "\(LiveWindowSizing.maxWindowSegments) entries"
+              + "\(ceiling) entries"
         EngineLog.emit(
             "[HLSVideoEngine] #443 live window served at \(window) segments "
             + "(~\(Int(Double(window) * cadence))s) of the \(asked) asked for "

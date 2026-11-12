@@ -292,6 +292,16 @@ final class DocumentedConstantsTests: XCTestCase {
         assertDocumented("capped at 900 playlist entries", docs)
     }
 
+    /// Fork (bettertv): the `liveMaxPlaylistSegments` row quotes its default and its clamp.
+    func testLiveMaxPlaylistSegmentsRowNumbers() throws {
+        let docs = try documentation()
+        XCTAssertEqual(LiveWindowSizing.resolvedMaxPlaylistSegments(nil), 900, "documented as the automatic 900")
+        XCTAssertEqual(LiveWindowSizing.resolvedMaxPlaylistSegments(1), 8, "documented clamp floor")
+        XCTAssertEqual(LiveWindowSizing.resolvedMaxPlaylistSegments(.max), 21_600, "documented clamp ceiling")
+        assertDocumented("keeps the automatic 900", docs)
+        assertDocumented("clamped to 8...21600", docs)
+    }
+
     // MARK: - Probe budgets
 
     func testWholeProbeDefaultsMatchDocumentation() throws {

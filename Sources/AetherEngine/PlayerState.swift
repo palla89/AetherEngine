@@ -671,6 +671,19 @@ public struct LoadOptions: Sendable, Equatable {
     /// `sessionCacheByteBudget`) and `nativeRemoteHLS`. Fork addition (bettertv). Default nil.
     public var liveDVRByteBudget: Int? = nil
 
+    /// Most entries a native (loopback) live playlist may list, which bounds the DVR window in segments
+    /// whatever `dvrWindowSeconds` and the disk budget allow. nil, zero or negative keeps the automatic
+    /// 900; other values are clamped to 8...21600. On `.fastZap` a segment is one source GOP (about 0.5
+    /// to 1 s on broadcast), so 900 entries is about 8 to 15 minutes of timeshift; a longer window needs
+    /// this raised (5400 holds 90 minutes at a 1 s GOP). The disk budget still applies on top. Cost: the
+    /// whole visible playlist is rebuilt and re-served on every client poll (about once per target
+    /// duration), and once more per native subtitle rendition, which mirrors it, so 5400 entries is
+    /// about 6x the per-poll work and text of 900, and AVPlayer re-parses every entry on every reload.
+    /// Raise it only for long DVR windows and measure on the slowest device you support. Ignored for
+    /// VOD, the software route (its packet ring is bounded in bytes) and `nativeRemoteHLS`. Fork
+    /// addition (bettertv). Default nil.
+    public var liveMaxPlaylistSegments: Int? = nil
+
     /// LL-HLS blocking-reload (`#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD`) override for live loopback sessions.
     /// nil (default) = auto: for a `LiveIngestSourceInfo` custom reader the engine derives eligibility from
     /// the OBSERVED upstream arrival cadence (off until sustained discipline is proven, permanently off once
